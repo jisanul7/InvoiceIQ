@@ -1,0 +1,6 @@
+Issue,Action Taken,Reason,Rows Affected
+Date Parsing,Converted to datetime64[ns],Enable date arithmetic and interval features,2500000
+Due Date < Invoice Date,Audited and verified,Chronological coherence of payment terms,0
+Payment Date < Invoice Date,Audited and verified,Payment cannot precede invoice date,0
+Non-positive Total Amount,Audited and verified,Transactions must reflect positive gross receivables,0
+Target Leakage on Open Records,Set delay & days_to_pay to NaN for pending invoices,Prevent ground truth leakage into unsettled records,425590
