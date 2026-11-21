@@ -1,0 +1,23 @@
+Feature Name,Source Column(s),Calculation / Encoding Logic,Data Type,Business & ML Rationale,Missing / Edge-Case Handling
+issue_month,invoice_date,dt.month (1-12),int8,Captures monthly billing/settlement seasonality,No missing values
+issue_quarter,invoice_date,dt.quarter (1-4),int8,Captures quarterly corporate budget cycles,No missing values
+issue_weekday,invoice_date,dt.dayofweek (0=Mon..6=Sun),int8,Captures weekday vs. weekend ERP issuance,No missing values
+is_month_end,invoice_date,dt.is_month_end (0/1),int8,Flags end-of-month closing surges,Binary 0/1
+is_quarter_end,invoice_date,dt.is_quarter_end (0/1),int8,Flags quarter-end accounting cutoffs,Binary 0/1
+payment_term_days,"due_date, invoice_date",(due_date - invoice_date).days,int16,Contractual credit window; r=+0.61 with days_to_pay,Validated >= 0
+days_until_due,"due_date, invoice_date",(due_date - invoice_date).days at t0,int16,Remaining credit horizon at prediction point t0,Relative to t0
+is_net_15/30/45/60,payment_term_days,Binary indicator for exact milestone terms,int8,Captures multimodal settlement spikes at 15/30/45/60d,Binary 0/1
+prev_invoice_count,"customer_id, invoice_date",Cumulative prior invoices where prior_date < t0,int32,Measures buyer relationship tenure & order frequency,0 for first-time buyers
+prev_avg_invoice_amount,"customer_id, total_amount, invoice_date",Past-only mean spend where prior_date < t0,float32,Establishes counterparty baseline spend scale,Imputed with Train median if count==0
+prev_avg_delay,"customer_id, payment_date, delay",Past-only mean delay where payment_date < t0,float32,Captures historical settlement speed vs. due date,Imputed with Train median if no prior settlement
+prev_late_rate,"customer_id, payment_date, due_date, paid_late",Past-only delinquency rate for outcomes realized < t0,float32,Strongest behavioral predictor of repeat delinquency,Imputed with Train median if no prior outcome
+is_first_time_customer,prev_invoice_count,1 if prev_invoice_count == 0 else 0,int8,Flags cold-start buyers with zero prior history,Binary 0/1
+log_total_amount,total_amount,"np.log1p(clip(total_amount, 0))",float32,Compresses right-skewed enterprise tail (max ~160k),Clipped at 0 before log1p
+tax_ratio / discount_ratio / shipping_ratio,"tax_amount, discount_amount, shipping_cost, subtotal, total_amount",Component ratios relative to invoice value,float32,Captures pricing/tax structure without raw collinearity,0.0 if denominator <= 0
+amount_to_cust_avg_ratio,"total_amount, prev_avg_invoice_amount",total_amount / prev_avg_invoice_amount,float32,Detects unusually large orders relative to buyer norm,Defaults to 1.0 for first-time buyers
+amount_bucket_*,total_amount,"One-hot bins: <10k, 10k-25k, 25k-50k, 50k+",float32,Captures non-linear approval thresholds by ticket tier,Fit on Train via OneHotEncoder
+*_freq_enc,"customer_country, customer_city, vendor_id, sales_rep",Normalized category frequency in Train split,float32,Encodes medium/high-cardinality IDs without sparsity,Unseen categories mapped to 0.0
+currency / payment_method / product_category / order_channel_*,Categorical columns,OneHotEncoder(handle_unknown='ignore') fit on Train,float32,Encodes nominal business attributes without ordinal bias,Unseen categories encoded as all-zeros
+*_scaled,All 20 continuous numeric features,StandardScaler() fit on Train split only,float32,Zero-mean unit-variance scaling for linear/neural models,Fit on Train; transformed on Val/Test
+paid_late (TARGET),"open_paid_flag, delay",1 if open_paid_flag==1 or delay>0 else 0,int8,Binary classification target (17.02% positive class),Excluded from input features
+delay_days (TARGET),"open_paid_flag, delay",delay if open_paid_flag==0 else NaN,float32,Continuous regression target on settled invoices,Excluded from input features; NaN if open
